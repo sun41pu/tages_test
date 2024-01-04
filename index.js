@@ -4,31 +4,60 @@ const readline = require('readline');
 let files = [];
 
 //Алгоритм быстрой сортировки
+
 function quickSortByLength(arr) {
-  if (arr.length <= 1) {
+  if (arr.length <= 1)
     return arr;
-  } else {
-    const left = [];
-    const right = [];
-    const pivot = arr[0];
-    for (let i = 1; i < arr.length; i++) {
-      if (arr[i].length < pivot.length) {
-        left.push(arr[i]);
-      } else {
-        right.push(arr[i]);
-      }
+  let p = Math.floor(arr.length / 2), pivot = arr[p];
+  const left = [], right = [];
+  for (var i = 0; i < arr.length; i++) {
+    if (i == p) continue;
+    if (arr[i].length < pivot.length) {
+      left.push(arr[i]);
     }
-    return quickSortByLength(left).concat(pivot, quickSortByLength(right));
+    else {
+      right.push(arr[i]);
+    }
   }
+  return quickSortByLength(left).concat(pivot, quickSortByLength(right));
 }
 
+function merge(left, right) {
+  let result = [];
+  let leftIndex = 0;
+  let rightIndex = 0;
+
+  while (leftIndex < left.length && rightIndex < right.length) {
+    if (left[leftIndex].length < right[rightIndex].length) {
+      result.push(left[leftIndex]);
+      leftIndex++;
+    } else {
+      result.push(right[rightIndex]);
+      rightIndex++;
+    }
+  }
+
+  return result.concat(left.slice(leftIndex), right.slice(rightIndex));
+}
+
+function mergeSortByLength(arr) {
+  if (arr.length <= 1) {
+    return arr;
+  }
+
+  const middle = Math.floor(arr.length / 2);
+  const left = arr.slice(0, middle);
+  const right = arr.slice(middle);
+
+  return merge(mergeSortByLength(left), mergeSortByLength(right));
+}
 
 //Основная функция
 async function sortLargeFile(inputFilePath) {
   const chunkSize = 250 * 1024 * 1024; // Устанавливаем размер чанка
   let chunkNumber = 0;
-  
   const lineMap = new Map();
+  console.log(chunkSize);
   
   const readStream = fs.createReadStream(inputFilePath, { encoding: 'utf8' });
   const rl = readline.createInterface({ input: readStream, crlfDelay: Infinity });
@@ -44,14 +73,13 @@ async function sortLargeFile(inputFilePath) {
     if (Buffer.from(line).length > chunkSize) {
       throw new Error('Строка превышает размер чанка');
     }
-    
-    if (Buffer.from([...lineMap.get(chunkNumber)]).length > chunkSize) {
 
-      // Сортируем и записываем чанк
-      const sortedChunk = quickSortByLength([...lineMap.get(chunkNumber)])
+
+    if (Buffer.byteLength(lineMap.get(chunkNumber).join('\n'), 'utf8') > chunkSize) {
+      const sortedChunk = quickSortByLength([...lineMap.get(chunkNumber)]);
       fs.writeFileSync(`chunk${chunkNumber}.txt`, sortedChunk.join('\n'));
-      // Переходим к следующему чанку
       chunkNumber++;
+      lineMap.set(chunkNumber, []);
     }
   }
 
@@ -64,28 +92,17 @@ async function sortLargeFile(inputFilePath) {
   
   // TODO: Объединить чанки обратно в один файл с помощью merge-sort
 
-  function mergeFiles(fileList, outputFile) {
-    let lists = [];
-    for (let file of fileList) {
-      let lines = fs.readFileSync(file, 'utf8').split('\n');
-      lists.push(quickSortByLength(lines));
-      // let lines = fs.readFileSync(file, 'utf8').split('\n');
-      // lines.sort((a, b) => a.length - b.length);
-      // lists.push(lines);
-    }
-  
-    let mergedList = quickSortByLength([].concat(...lists))
-    //удаляем временные файлы
-    for (let file of files) {
-      fs.unlinkSync(file);
-    }
-  
-    fs.writeFileSync(outputFile, mergedList.join('\n'));
+  const sortedFiles = files.map((file) => {
+    const content = fs.readFileSync(file, 'utf8').split('\n');
+    return mergeSortByLength(content);
+  });
+
+  const mergedContent = mergeSortByLength(sortedFiles.flat());
+  for (let file of files) {
+    fs.unlinkSync(file);
   }
-
+  fs.writeFileSync('output_fin.txt', mergedContent.join('\n'));
   
-
-  mergeFiles(files, 'sorted_out.txt')
 }
 
-sortLargeFile('generatedFile1.txt');
+sortLargeFile('input.txt');
